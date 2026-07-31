@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Chalo — Driver</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="shared/theme.css" />
+<style>
+  html, body { height: 100%; }
+  #app { max-width: 480px; margin: 0 auto; padding: 16px; padding-bottom: 100px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .brand { font-family: var(--font-display); font-weight: 700; font-size: 22px; }
+  .brand span { color: var(--accent); }
+  .toggle-row { display: flex; align-items: center; gap: 10px; }
+  #onlineToggle {
+    width: 52px; height: 30px; border-radius: 100px; background: var(--surface-2);
+    border: 1px solid var(--border); position: relative; cursor: pointer;
+  }
+  #onlineToggle .knob {
+    position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--text-dim); transition: all 0.2s ease;
+  }
+  #onlineToggle.on { background: rgba(0,194,168,0.2); border-color: var(--live); }
+  #onlineToggle.on .knob { left: 25px; background: var(--live); }
+  #map { width: 100%; height: 220px; border-radius: var(--radius); margin-bottom: 16px; border: 1px solid var(--border); }
+  .stats-row { display: flex; gap: 10px; margin-bottom: 16px; }
+  .stat-card { flex: 1; }
+  .stat-card .num { font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+  .stat-card .label { font-size: 12px; color: var(--text-dim); }
+  .ride-req { margin-bottom: 12px; }
+  .ride-req .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .ride-req .fare { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--accent); }
+  .ride-req .km { font-size: 12px; color: var(--text-dim); }
+  #emptyState { text-align: center; padding: 40px 16px; color: var(--text-dim); }
+  .active-ride-panel { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 16px; border-radius: 20px 20px 0 0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">Chalo<span>.</span> Driver</div>
+    <div class="toggle-row">
+      <span class="hint" id="statusLabel" style="font-size:13px;color:var(--text-dim);">Offline</span>
+      <div id="onlineToggle" onclick="toggleOnline()"><div class="knob"></div></div>
+    </div>
+  </header>
+
+  <div id="map"></div>
+
+  <div class="stats-row">
+    <div class="card stat-card"><div class="num" id="todayRides">0</div><div class="label">Aaj ki rides</div></div>
+    <div class="card stat-card"><div class="num" id="todayEarnings">₹0</div><div class="label">Aaj ki kamai</div></div>
+  </div>
+
+  <div id="requestsList"></div>
+  <div id="emptyState">Online ho jao, nayi ride requests yahan dikhengi.</div>
+</div>
+
+<div class="active-ride-panel" id="activePanel" style="display:none;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <div>
+      <div class="loc-value" id="activeRiderName" style="font-weight:600;">Rider</div>
+      <div class="hint" style="font-size:12px;color:var(--text-dim);" id="activeStatusText">Pickup ki taraf jao</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-family:var(--font-display);font-size:20px;font-weight:700;" id="activeFareAmt">₹0</div>
+      <div class="hint" style="font-size:12px;color:var(--text-dim);" id="activeKm">0 km</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <button class="btn-secondary" style="flex:1;" id="cancelBtn" onclick="cancelActiveRide()">Cancel</button>
+    <button class="btn-secondary" style="flex:1;" id="directionsBtn" onclick="openDirections()">🧭 Directions</button>
+    <button class="btn-primary" style="flex:2;" id="advanceBtn" onclick="advanceRide()">Pahunch gaya</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+  import { auth, db, signInAnonymously, onAuthStateChanged, ref, set, update, onValue, get, runTransaction, off } from "./shared/firebase-config.js";
+  import { encryptLocation, decryptLocation } from "./shared/crypto.js";
+  import { requestNotifyPermission, notify } from "./shared/notify.js";
+
+  let uid = null, map, myMarker, watchId = null;
+  let isOnline = false;
+  let activeRideId = null;
+  let requestListenerRef = null;
+  let myLastLoc = null;
+  let seenRequestIds = new Set();   // notification spam se bachne ke liye — ek ride ek hi baar notify hoti hai
+  let activeRidePickup = null, activeRideDrop = null; // decrypted, Directions button ke liye cache
+
+  signInAnonymously(auth).catch(err => console.error(err));
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) return;
+    uid = user.uid;
+    const name = localStorage.getItem('chalo_driver_name') || prompt('Aapka naam?') || 'Driver';
+    localStorage.setItem('chalo_driver_name', name);
+    const vehicle = localStorage.getItem('chalo_driver_vehicle') || prompt('Vehicle number?') || '';
+    localStorage.setItem('chalo_driver_vehicle', vehicle);
+
+    await set(ref(db, `drivers/${uid}`), {
+      name, vehicleNumber: vehicle, online: false, updatedAt: Date.now()
+    });
+
+    startMap();
+    loadTodayStats();
+    resumeActiveRide();
+  });
+
+  function startMap() {
+    map = L.map('map', { zoomControl: false, attributionControl: false }).setView([26.85, 80.95], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+  }
+
+  window.toggleOnline = async function () {
+    isOnline = !isOnline;
+    document.getElementById('onlineToggle').classList.toggle('on', isOnline);
+    document.getElementById('statusLabel').textContent = isOnline ? 'Online' : 'Offline';
+    await update(ref(db, `drivers/${uid}`), { online: isOnline });
+
+    if (isOnline) {
+      requestNotifyPermission(); // user-gesture (toggle click) ke baad maangna sabse reliable hai
+      startLocationBroadcast();
+      listenForRequests();
+    } else {
+      stopLocationBroadcast();
+      if (requestListenerRef) off(requestListenerRef);
+      document.getElementById('requestsList').innerHTML = '';
+      document.getElementById('emptyState').style.display = 'block';
+    }
+  };
+
+  function startLocationBroadcast() {
+    if (!navigator.geolocation) return;
+    watchId = navigator.geolocation.watchPosition(async (pos) => {
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      myLastLoc = { lat, lng };
+      if (!myMarker) { myMarker = L.circleMarker([lat, lng], { radius: 8, color: '#00C2A8', fillColor: '#00C2A8', fillOpacity: 1 }).addTo(map); map.setView([lat, lng], 15); }
+      else { myMarker.setLatLng([lat, lng]); }
+
+      const enc = await encryptLocation(lat, lng);
+      await update(ref(db, `drivers/${uid}`), { location: enc });
+      if (activeRideId) {
+        await update(ref(db, `rides/${activeRideId}`), { driverLiveLocation: enc });
+      }
+    }, err => console.error(err), { enableHighAccuracy: true, maximumAge: 3000 });
+  }
+
+  function stopLocationBroadcast() {
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+
+  function listenForRequests() {
+    requestListenerRef = ref(db, 'rides');
+    onValue(requestListenerRef, (snap) => {
+      if (activeRideId) return; // ride le chuke to naye requests mat dikhao
+      const rides = snap.val() || {};
+      const list = document.getElementById('requestsList');
+      list.innerHTML = '';
+      let count = 0;
+      Object.entries(rides).forEach(([id, ride]) => {
+        if (ride.status !== 'requested') return;
+        count++;
+
+        // Naya request pehli baar dikha hai to notify karo (renotify nahi, warna
+        // har onValue tick pe dobara ping aata rahega)
+        if (!seenRequestIds.has(id)) {
+          seenRequestIds.add(id);
+          notify('Nayi Ride Request! 🚕', `${ride.riderName || 'Rider'} — ${ride.distanceKm} km, ₹${ride.fare}`, {
+            tag: `ride-req-${id}`,
+            onClick: () => document.getElementById('requestsList')?.scrollIntoView({ behavior: 'smooth' })
+          });
+        }
+
+        const div = document.createElement('div');
+        div.className = 'card ride-req';
+        div.innerHTML = `
+          <div class="top">
+            <div class="loc-value">${ride.riderName || 'Rider'}</div>
+            <div class="fare">₹${ride.fare}</div>
+          </div>
+          <div class="km">${ride.distanceKm} km ki ride</div>
+          <button class="btn-primary" style="width:100%;margin-top:10px;">Accept Karo</button>
+        `;
+        div.querySelector('button').onclick = () => acceptRide(id);
+        list.appendChild(div);
+      });
+      document.getElementById('emptyState').style.display = count === 0 ? 'block' : 'none';
+    });
+  }
+
+  window.acceptRide = async function (rideId) {
+    // transaction se ensure karo ki do drivers ek saath accept na kar paayein
+    const rideRef = ref(db, `rides/${rideId}`);
+    const result = await runTransaction(rideRef, (ride) => {
+      if (!ride) return ride;
+      if (ride.status !== 'requested') return; // abort — kisi aur ne le liya
+      ride.status = 'accepted';
+      ride.driverUid = uid;
+      ride.driverName = localStorage.getItem('chalo_driver_name');
+      ride.vehicleNumber = localStorage.getItem('chalo_driver_vehicle');
+      ride.acceptedAt = Date.now();
+      return ride;
+    });
+
+    if (!result.committed || !result.snapshot.exists()) {
+      alert('Ye ride kisi aur driver ne le li.');
+      return;
+    }
+
+    activeRideId = rideId;
+    activeRidePickup = null; activeRideDrop = null;
+    localStorage.setItem('chalo_active_ride_driver', rideId);
+    document.getElementById('requestsList').innerHTML = '';
+    document.getElementById('emptyState').style.display = 'none';
+    watchActiveRide(rideId);
+  };
+
+  function resumeActiveRide() {
+    const saved = localStorage.getItem('chalo_active_ride_driver');
+    if (saved) { activeRideId = saved; watchActiveRide(saved); }
+  }
+
+  function watchActiveRide(rideId) {
+    onValue(ref(db, `rides/${rideId}`), async (snap) => {
+      const ride = snap.val();
+      if (!ride) return;
+      if (['completed', 'cancelled'].includes(ride.status)) {
+        document.getElementById('activePanel').style.display = 'none';
+        activeRideId = null;
+        activeRidePickup = null; activeRideDrop = null;
+        localStorage.removeItem('chalo_active_ride_driver');
+        if (isOnline) loadTodayStats();
+        return;
+      }
+      // Pickup/drop sirf ek baar decrypt karke cache karo (Directions button ke liye)
+      if (ride.pickup && !activeRidePickup) activeRidePickup = await decryptLocation(ride.pickup);
+      if (ride.drop && !activeRideDrop) activeRideDrop = await decryptLocation(ride.drop);
+
+      document.getElementById('activePanel').style.display = 'block';
+      document.getElementById('activeRiderName').textContent = ride.riderName || 'Rider';
+      document.getElementById('activeFareAmt').textContent = `₹${ride.fare}`;
+      document.getElementById('activeKm').textContent = `${ride.distanceKm} km`;
+      const stepMap = {
+        accepted: { text: 'Pickup ki taraf jao', btn: 'Pickup Point Pahunch Gaya' },
+        arrived: { text: 'Rider ka wait karo', btn: 'Ride Shuru Karo' },
+        ongoing: { text: 'Drop ki taraf jao', btn: 'Ride Complete Karo' }
+      };
+      const step = stepMap[ride.status];
+      if (step) {
+        document.getElementById('activeStatusText').textContent = step.text;
+        document.getElementById('advanceBtn').textContent = step.btn;
+      }
+    });
+  }
+
+  // Pickup tak jab ride 'accepted'/'arrived' hai, drop tak jab 'ongoing' hai.
+  // Google Maps deep-link — app installed hai to app khulega, warna browser mein maps.
+  window.openDirections = async function () {
+    if (!activeRideId) return;
+    const snap = await get(ref(db, `rides/${activeRideId}`));
+    const ride = snap.val();
+    if (!ride) return;
+
+    const dest = ride.status === 'ongoing' ? activeRideDrop : activeRidePickup;
+    if (!dest) { alert('Location abhi load ho rahi hai, thodi der mein try karo.'); return; }
+
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=driving`;
+    window.open(url, '_blank');
+  };
+
+  window.advanceRide = async function () {
+    if (!activeRideId) return;
+    const snap = await get(ref(db, `rides/${activeRideId}`));
+    const ride = snap.val();
+    if (!ride) return;
+    const nextStatus = { accepted: 'arrived', arrived: 'ongoing', ongoing: 'completed' }[ride.status];
+    if (!nextStatus) return;
+    const payload = { status: nextStatus };
+    if (nextStatus === 'arrived') payload.arrivedAt = Date.now();
+    if (nextStatus === 'ongoing') payload.startedAt = Date.now();
+    if (nextStatus === 'completed') payload.completedAt = Date.now();
+    await update(ref(db, `rides/${activeRideId}`), payload);
+  };
+
+  window.cancelActiveRide = async function () {
+    if (!activeRideId) return;
+    await update(ref(db, `rides/${activeRideId}`), { status: 'cancelled', cancelledAt: Date.now() });
+  };
+
+  async function loadTodayStats() {
+    const snap = await get(ref(db, 'rides'));
+    const rides = snap.val() || {};
+    const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+    let count = 0, earnings = 0;
+    Object.values(rides).forEach(ride => {
+      if (ride.driverUid === uid && ride.status === 'completed' && ride.completedAt >= startOfDay.getTime()) {
+        count++; earnings += ride.fare;
+      }
+    });
+    document.getElementById('todayRides').textContent = count;
+    document.getElementById('todayEarnings').textContent = `₹${earnings}`;
+  }
+</script>
+</body>
+</html>

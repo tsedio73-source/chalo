@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Chalo — Rider</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="shared/theme.css" />
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  #map { position: fixed; inset: 0; z-index: 0; }
+  header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; background: linear-gradient(180deg, rgba(15,17,21,0.92), rgba(15,17,21,0));
+    pointer-events: none;
+  }
+  header .brand { font-family: var(--font-display); font-weight: 700; font-size: 20px; pointer-events: auto; }
+  header .brand span { color: var(--accent); }
+  #sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    background: var(--surface); border-top: 1px solid var(--border);
+    border-radius: 20px 20px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.4);
+    max-height: 60vh; overflow-y: auto;
+  }
+  .row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dot.pickup { background: var(--live); }
+  .dot.drop { background: var(--accent); }
+  .loc-label { font-size: 13px; color: var(--text-dim); }
+  .loc-value { font-size: 14px; font-weight: 500; }
+  .hint { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  #fareBox {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px; margin: 12px 0;
+  }
+  #fareBox .amount { font-family: var(--font-display); font-size: 26px; font-weight: 700; }
+  #fareBox .meta { font-size: 12px; color: var(--text-dim); text-align: right; }
+  .driver-card { display: flex; align-items: center; gap: 12px; }
+  .driver-avatar {
+    width: 46px; height: 46px; border-radius: 50%; background: var(--surface-2);
+    display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-weight: 700;
+    border: 1px solid var(--border);
+  }
+  .status-line { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); margin-bottom: 10px; }
+  #nameGate {
+    position: fixed; inset: 0; z-index: 50; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px;
+  }
+  #nameGate input { max-width: 280px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="nameGate">
+  <div class="display" style="font-size:28px;">Chalo<span style="color:var(--accent)">.</span></div>
+  <div class="hint" style="font-size:14px;">Apna naam daalo shuru karne ke liye</div>
+  <input id="nameInput" placeholder="Aapka naam" />
+  <button class="btn-primary" style="width:200px" onclick="setRiderName()">Aage Badho</button>
+</div>
+
+<header>
+  <div class="brand">Chalo<span>.</span></div>
+  <div class="pill" id="connPill">● connecting</div>
+</header>
+
+<div id="map"></div>
+
+<div id="sheet">
+  <div id="bookingView">
+    <div class="row"><div class="dot pickup"></div>
+      <div><div class="loc-label">Pickup</div><div class="loc-value" id="pickupLabel">Location dhoondh rahe hain...</div></div>
+    </div>
+    <div class="row"><div class="dot drop"></div>
+      <div><div class="loc-label">Drop</div><div class="loc-value" id="dropLabel">Map par tap karke drop pin lagao</div></div>
+    </div>
+    <div id="fareBox" style="display:none;">
+      <div>
+        <div class="loc-label">Estimated Fare</div>
+        <div class="amount">₹<span id="fareAmount">0</span></div>
+      </div>
+      <div class="meta" id="fareMeta"></div>
+    </div>
+    <button class="btn-primary" id="bookBtn" style="width:100%;" disabled onclick="requestRide()">Drop pin lagao pehle</button>
+  </div>
+
+  <div id="searchingView" style="display:none;">
+    <div class="status-line"><span class="pulse-dot accent"></span> Driver dhoond rahe hain...</div>
+    <div class="hint">Thoda wait karo, nearby driver ko notify kar diya hai.</div>
+    <button class="btn-danger" style="width:100%; margin-top:14px;" onclick="cancelRide()">Cancel Ride</button>
+  </div>
+
+  <div id="activeRideView" style="display:none;">
+    <div class="status-line"><span class="pulse-dot"></span> <span id="rideStatusText">Driver aa raha hai</span></div>
+    <div class="driver-card">
+      <div class="driver-avatar" id="driverInitial">D</div>
+      <div style="flex:1;">
+        <div class="loc-value" id="driverName">Driver</div>
+        <div class="hint" id="driverVehicle">Vehicle</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="loc-value">₹<span id="activeFare">0</span></div>
+        <div class="hint" id="activeDist">-- km</div>
+      </div>
+    </div>
+    <button class="btn-danger" style="width:100%; margin-top:14px;" id="cancelActiveBtn" onclick="cancelRide()">Cancel Ride</button>
+  </div>
+
+  <div id="completedView" style="display:none; text-align:center;">
+    <div class="hint">Ride complete ✓</div>
+    <div class="amount" style="font-size:32px; margin:8px 0;">₹<span id="finalFare">0</span></div>
+    <div class="hint" id="finalDist" style="margin-bottom:16px;"></div>
+    <button class="btn-primary" style="width:100%;" onclick="resetToBooking()">Nayi Ride Book Karo</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+  import { auth, db, signInAnonymously, onAuthStateChanged, ref, set, update, onValue, push, get, off } from "./shared/firebase-config.js";
+  import { encryptLocation, decryptLocation } from "./shared/crypto.js";
+  import { calculateFare, haversineKm, estimateRoadKm } from "./shared/fare.js";
+  import { requestNotifyPermission, notify } from "./shared/notify.js";
+
+  let uid = null, map, pickupMarker, dropMarker, driverMarker, routeLine;
+  let pickup = null, drop = null;
+  let currentRideId = null;
+  let rideListenerRef = null;
+  let lastNotifiedStatus = null; // duplicate notifications se bachne ke liye (same status baar-baar mat bhejo)
+
+  // ---- Name gate ----
+  window.setRiderName = function () {
+    const name = document.getElementById('nameInput').value.trim();
+    if (!name) return;
+    localStorage.setItem('chalo_rider_name', name);
+    document.getElementById('nameGate').style.display = 'none';
+    requestNotifyPermission(); // button click = real user gesture, permission prompt yahin maango
+    init();
+  };
+
+  const savedName = localStorage.getItem('chalo_rider_name');
+  if (savedName) {
+    document.getElementById('nameGate').style.display = 'none';
+    requestNotifyPermission();
+    init();
+  }
+
+  function init() {
+    signInAnonymously(auth).catch(err => console.error(err));
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
+      uid = user.uid;
+      document.getElementById('connPill').textContent = '● online';
+      await set(ref(db, `riders/${uid}`), {
+        name: localStorage.getItem('chalo_rider_name'),
+        updatedAt: Date.now()
+      });
+      startMap();
+      resumeActiveRide();
+    });
+  }
+
+  function startMap() {
+    map = L.map('map', { zoomControl: false }).setView([26.85, 80.95], 15); // fallback: Lucknow area
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    navigator.geolocation.getCurrentPosition(pos => {
+      pickup = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      map.setView([pickup.lat, pickup.lng], 16);
+      pickupMarker = L.circleMarker([pickup.lat, pickup.lng], { radius: 8, color: '#00C2A8', fillColor: '#00C2A8', fillOpacity: 1 }).addTo(map);
+      document.getElementById('pickupLabel').textContent = `${pickup.lat.toFixed(5)}, ${pickup.lng.toFixed(5)}`;
+    }, err => {
+      document.getElementById('pickupLabel').textContent = 'Location access nahi mili — GPS on karo';
+    }, { enableHighAccuracy: true });
+
+    map.on('click', (e) => {
+      if (currentRideId) return; // booking ke baad drop lock
+      drop = { lat: e.latlng.lat, lng: e.latlng.lng };
+      if (dropMarker) map.removeLayer(dropMarker);
+      dropMarker = L.circleMarker([drop.lat, drop.lng], { radius: 8, color: '#FF6B35', fillColor: '#FF6B35', fillOpacity: 1 }).addTo(map);
+      document.getElementById('dropLabel').textContent = `${drop.lat.toFixed(5)}, ${drop.lng.toFixed(5)}`;
+      updateFareEstimate();
+    });
+  }
+
+  function updateFareEstimate() {
+    if (!pickup || !drop) return;
+    const straight = haversineKm(pickup.lat, pickup.lng, drop.lat, drop.lng);
+    const roadKm = estimateRoadKm(straight);
+    const fare = calculateFare(roadKm);
+    document.getElementById('fareBox').style.display = 'flex';
+    document.getElementById('fareAmount').textContent = fare;
+    document.getElementById('fareMeta').textContent = `~${roadKm.toFixed(1)} km`;
+    const btn = document.getElementById('bookBtn');
+    btn.disabled = false;
+    btn.textContent = 'Ride Book Karo';
+    btn.dataset.fare = fare;
+    btn.dataset.km = roadKm.toFixed(2);
+  }
+
+  window.requestRide = async function () {
+    if (!pickup || !drop || !uid) return;
+    const btn = document.getElementById('bookBtn');
+    btn.disabled = true;
+    btn.textContent = 'Book kar rahe hain...';
+
+    const pickupEnc = await encryptLocation(pickup.lat, pickup.lng);
+    const dropEnc = await encryptLocation(drop.lat, drop.lng);
+    const fare = Number(btn.dataset.fare);
+    const km = Number(btn.dataset.km);
+
+    const newRideRef = push(ref(db, 'rides'));
+    currentRideId = newRideRef.key;
+    await set(newRideRef, {
+      riderUid: uid,
+      riderName: localStorage.getItem('chalo_rider_name'),
+      pickup: pickupEnc,
+      drop: dropEnc,
+      distanceKm: km,
+      fare,
+      status: 'requested',
+      createdAt: Date.now()
+    });
+    localStorage.setItem('chalo_active_ride', currentRideId);
+
+    document.getElementById('bookingView').style.display = 'none';
+    document.getElementById('searchingView').style.display = 'block';
+    listenToRide(currentRideId);
+  };
+
+  window.cancelRide = async function () {
+    if (!currentRideId) return;
+    await update(ref(db, `rides/${currentRideId}`), { status: 'cancelled', cancelledAt: Date.now() });
+  };
+
+  function resumeActiveRide() {
+    const savedRide = localStorage.getItem('chalo_active_ride');
+    if (savedRide) {
+      currentRideId = savedRide;
+      listenToRide(savedRide);
+    }
+  }
+
+  function listenToRide(rideId) {
+    rideListenerRef = ref(db, `rides/${rideId}`);
+    onValue(rideListenerRef, async (snap) => {
+      const ride = snap.val();
+      if (!ride) return;
+
+      if (ride.status === 'requested') {
+        document.getElementById('bookingView').style.display = 'none';
+        document.getElementById('searchingView').style.display = 'block';
+        document.getElementById('activeRideView').style.display = 'none';
+      }
+
+      if (['accepted', 'arrived', 'ongoing'].includes(ride.status)) {
+        document.getElementById('searchingView').style.display = 'none';
+        document.getElementById('bookingView').style.display = 'none';
+        document.getElementById('activeRideView').style.display = 'block';
+        document.getElementById('driverName').textContent = ride.driverName || 'Driver';
+        document.getElementById('driverInitial').textContent = (ride.driverName || 'D')[0].toUpperCase();
+        document.getElementById('driverVehicle').textContent = ride.vehicleNumber || '';
+        document.getElementById('activeFare').textContent = ride.fare;
+        document.getElementById('activeDist').textContent = `${ride.distanceKm} km`;
+        const statusMap = { accepted: 'Driver aa raha hai', arrived: 'Driver pickup par pahunch gaya', ongoing: 'Ride chal rahi hai' };
+        document.getElementById('rideStatusText').textContent = statusMap[ride.status] || ride.status;
+
+        if (lastNotifiedStatus !== ride.status) {
+          lastNotifiedStatus = ride.status;
+          const notifyText = {
+            accepted: `${ride.driverName || 'Driver'} aa raha hai — ${ride.vehicleNumber || ''}`,
+            arrived: `${ride.driverName || 'Driver'} pickup point par pahunch gaya!`,
+            ongoing: 'Ride shuru ho gayi — enjoy the ride!'
+          }[ride.status];
+          if (notifyText) notify('Chalo — Ride Update', notifyText, { tag: `ride-${rideId}` });
+        }
+
+        if (ride.driverLiveLocation) {
+          const loc = await decryptLocation(ride.driverLiveLocation);
+          if (loc) {
+            if (!driverMarker) {
+              driverMarker = L.marker([loc.lat, loc.lng]).addTo(map);
+            } else {
+              driverMarker.setLatLng([loc.lat, loc.lng]);
+            }
+            map.panTo([loc.lat, loc.lng]);
+          }
+        }
+      }
+
+      if (ride.status === 'completed') {
+        document.getElementById('activeRideView').style.display = 'none';
+        document.getElementById('completedView').style.display = 'block';
+        document.getElementById('finalFare').textContent = ride.fare;
+        document.getElementById('finalDist').textContent = `${ride.distanceKm} km ki ride`;
+        if (lastNotifiedStatus !== 'completed') {
+          lastNotifiedStatus = 'completed';
+          notify('Chalo — Ride Complete ✓', `Total fare ₹${ride.fare}`, { tag: `ride-${rideId}` });
+        }
+        localStorage.removeItem('chalo_active_ride');
+        off(rideListenerRef);
+      }
+
+      if (ride.status === 'cancelled') {
+        resetToBooking();
+        off(rideListenerRef);
+      }
+    });
+  }
+
+  window.resetToBooking = function () {
+    currentRideId = null;
+    lastNotifiedStatus = null;
+    localStorage.removeItem('chalo_active_ride');
+    drop = null;
+    if (dropMarker) { map.removeLayer(dropMarker); dropMarker = null; }
+    if (driverMarker) { map.removeLayer(driverMarker); driverMarker = null; }
+    document.getElementById('completedView').style.display = 'none';
+    document.getElementById('searchingView').style.display = 'none';
+    document.getElementById('activeRideView').style.display = 'none';
+    document.getElementById('bookingView').style.display = 'block';
+    document.getElementById('dropLabel').textContent = 'Map par tap karke drop pin lagao';
+    document.getElementById('fareBox').style.display = 'none';
+    document.getElementById('bookBtn').disabled = true;
+    document.getElementById('bookBtn').textContent = 'Drop pin lagao pehle';
+  };
+</script>
+</body>
+</html>
