@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chalo — Ride-hailing, run your way</title>
+<meta name="description" content="Chalo is a lightweight ride-hailing platform. Book a ride, drive for riders, or manage the whole fleet." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/theme.css" />
+<style>
+  html { scroll-behavior: smooth; }
+  body { overflow-x: hidden; }
+
+  a { color: inherit; text-decoration: none; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+  /* ---------- Nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px;
+    background: rgba(15,17,21,0.82);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner { max-width: 1080px; margin: 0 auto; width: 100%; display: flex; align-items: center; justify-content: space-between; }
+  .brand { font-family: var(--font-display); font-weight: 700; font-size: 19px; }
+  .brand span { color: var(--accent); }
+  .nav-links { display: flex; gap: 6px; }
+  .nav-links a {
+    font-size: 13px; font-weight: 600; color: var(--text-dim);
+    padding: 8px 14px; border-radius: 100px; border: 1px solid transparent;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .nav-links a:hover { color: var(--text); border-color: var(--border); background: var(--surface); }
+  .nav-links a.emph { color: #14100C; background: var(--accent); }
+  .nav-links a.emph:hover { color: #14100C; background: var(--accent); opacity: 0.92; border-color: transparent; }
+
+  /* ---------- Hero ---------- */
+  .hero { padding: 88px 20px 64px; position: relative; }
+  .eyebrow-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600; color: var(--text-dim);
+    border: 1px solid var(--border); background: var(--surface);
+    padding: 6px 12px; border-radius: 100px; margin-bottom: 22px;
+  }
+  .hero h1 {
+    font-size: clamp(40px, 7vw, 68px);
+    line-height: 1.02;
+    font-weight: 700;
+    max-width: 720px;
+    letter-spacing: -0.02em;
+  }
+  .hero h1 .accent-word { color: var(--accent); }
+  .hero p.lede {
+    font-size: 17px; color: var(--text-dim); max-width: 520px;
+    margin-top: 20px; line-height: 1.6;
+  }
+  .hero-ctas { display: flex; gap: 12px; margin-top: 32px; flex-wrap: wrap; }
+  .hero-ctas a.btn-primary, .hero-ctas a.btn-secondary { display: inline-flex; align-items: center; justify-content: center; }
+
+  /* ---------- Route illustration (signature motif) ---------- */
+  .route-strip {
+    margin-top: 56px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    overflow: hidden;
+  }
+  .route-strip svg { display: block; width: 100%; height: auto; }
+  .route-path {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 2;
+    stroke-dasharray: 6 8;
+  }
+  .route-path.animated {
+    stroke: var(--accent);
+    stroke-dasharray: 460;
+    stroke-dashoffset: 460;
+    animation: draw-route 3.2s ease-in-out infinite;
+  }
+  @keyframes draw-route {
+    0% { stroke-dashoffset: 460; }
+    45%, 60% { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: -460; }
+  }
+  .route-labels { display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; color: var(--text-dim); }
+  .route-labels b { color: var(--text); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .route-path.animated { animation: none; stroke-dashoffset: 0; }
+  }
+
+  /* ---------- Section shell ---------- */
+  section.block { padding: 72px 20px; border-top: 1px solid var(--border); }
+  .section-head { max-width: 560px; margin-bottom: 40px; }
+  .section-eyebrow { font-family: var(--font-mono, monospace); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 10px; }
+  .section-head h2 { font-size: clamp(26px, 4vw, 34px); font-weight: 700; letter-spacing: -0.01em; }
+  .section-head p { color: var(--text-dim); font-size: 15px; margin-top: 10px; line-height: 1.6; }
+
+  /* ---------- Portal cards ---------- */
+  .portals-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .portal-card {
+    display: flex; flex-direction: column; gap: 14px;
+    padding: 24px; transition: border-color 0.2s ease, transform 0.2s ease;
+  }
+  .portal-card:hover { border-color: var(--accent-dim); transform: translateY(-3px); }
+  .portal-icon {
+    width: 42px; height: 42px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface-2); border: 1px solid var(--border);
+    font-size: 19px;
+  }
+  .portal-card h3 { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+  .portal-card p { font-size: 13.5px; color: var(--text-dim); line-height: 1.55; flex: 1; }
+  .portal-card .go {
+    font-size: 13px; font-weight: 600; color: var(--accent);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .portal-card .go svg { transition: transform 0.15s ease; }
+  .portal-card:hover .go svg { transform: translateX(3px); }
+
+  /* ---------- Fare calculator (signature interactive element) ---------- */
+  .calc-card { padding: 28px; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 32px; align-items: center; }
+  .calc-slider-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+  .calc-slider-row .km-val { font-family: var(--font-display); font-size: 15px; font-weight: 700; }
+  input[type="range"] {
+    -webkit-appearance: none; width: 100%; height: 4px; border-radius: 4px;
+    background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--fill, 30%), var(--surface-2) var(--fill, 30%), var(--surface-2) 100%);
+    outline: none; padding: 0; margin: 8px 0 4px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); border: 3px solid #14100C; cursor: pointer;
+    box-shadow: 0 0 0 3px rgba(255,107,53,0.18);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%; background: var(--accent);
+    border: 3px solid #14100C; cursor: pointer;
+  }
+  .calc-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); }
+  .calc-breakdown { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--text-dim); }
+  .calc-breakdown .line { display: flex; justify-content: space-between; }
+  .calc-breakdown .line b { color: var(--text); font-weight: 600; }
+  .calc-result {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 26px; text-align: center;
+  }
+  .calc-result .label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+  .calc-result .amount { font-family: var(--font-display); font-size: 46px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .calc-result .amount span { font-size: 22px; vertical-align: top; }
+  .calc-result .sub { font-size: 12.5px; color: var(--text-dim); margin-top: 8px; }
+
+  @media (max-width: 720px) {
+    .calc-card { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Feature grid ---------- */
+  .features-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .feature-card { padding: 22px; }
+  .feature-card .tag {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--live); background: rgba(0,194,168,0.12); padding: 3px 9px; border-radius: 100px; margin-bottom: 12px;
+  }
+  .feature-card h3 { font-family: var(--font-display); font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .feature-card p { font-size: 13.5px; color: var(--text-dim); line-height: 1.6; }
+
+  /* ---------- Ride flow ---------- */
+  .flow-track { display: flex; align-items: center; gap: 0; overflow-x: auto; padding-bottom: 8px; }
+  .flow-step { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 108px; flex-shrink: 0; }
+  .flow-step .node {
+    width: 34px; height: 34px; border-radius: 50%; background: var(--surface-2);
+    border: 1px solid var(--border); display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-size: 12px; font-weight: 700; color: var(--text-dim);
+  }
+  .flow-step.done .node { background: var(--live); border-color: var(--live); color: #04211d; }
+  .flow-step span.label { font-size: 12px; color: var(--text-dim); text-align: center; }
+  .flow-connector { flex: 1; height: 1px; background: var(--border); min-width: 24px; margin: 0 -2px 22px; }
+
+  /* ---------- Footer ---------- */
+  footer { padding: 48px 20px 40px; }
+  .footer-grid { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 32px; }
+  .footer-links { display: flex; gap: 22px; flex-wrap: wrap; }
+  .footer-links a { font-size: 13px; color: var(--text-dim); font-weight: 500; }
+  .footer-links a:hover { color: var(--text); }
+  .footer-note { font-size: 12.5px; color: var(--text-dim); margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border); }
+
+  @media (max-width: 860px) {
+    .portals-grid { grid-template-columns: 1fr; }
+    .features-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="brand">Chalo<span>.</span></div>
+    <div class="nav-links">
+      <a href="rider.html">Rider</a>
+      <a href="driver.html">Driver</a>
+      <a href="admin.html">Admin</a>
+      <a href="rider.html" class="emph">Book a ride</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow-pill"><span class="pulse-dot" style="width:8px;height:8px;"></span> Live GPS · Encrypted · Self-hosted</div>
+    <h1>Get there. <span class="accent-word">Drive</span> there.<br>Run the whole fleet.</h1>
+    <p class="lede">Chalo is a complete ride-hailing stack in three lightweight apps — one for riders, one for drivers, one for the person watching over both. No app store, no lock-in, your own Firebase backend.</p>
+    <div class="hero-ctas">
+      <a href="rider.html" class="btn-primary">Book a ride →</a>
+      <a href="driver.html" class="btn-secondary">Drive with Chalo</a>
+    </div>
+
+    <div class="route-strip">
+      <svg viewBox="0 0 1000 120" preserveAspectRatio="none">
+        <path class="route-path" d="M40,90 C 220,90 260,30 460,30 S 720,95 960,30" />
+        <path class="route-path animated" d="M40,90 C 220,90 260,30 460,30 S 720,95 960,30" />
+        <circle cx="40" cy="90" r="6" fill="var(--live)" />
+        <circle cx="960" cy="30" r="6" fill="var(--accent)" />
+      </svg>
+      <div class="route-labels"><span>● Pickup — <b>driver assigned in seconds</b></span><span><b>Live tracking</b> the whole way — Drop ●</span></div>
+    </div>
+  </div>
+</header>
+
+<section class="block" id="portals">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-eyebrow">Three apps, one platform</div>
+      <h2>Pick your door in</h2>
+      <p>Each portal is a standalone page talking to the same real-time backend — open the one that matches what you're doing right now.</p>
+    </div>
+    <div class="portals-grid">
+      <a class="card portal-card" href="rider.html">
+        <div class="portal-icon">🚕</div>
+        <h3>Rider</h3>
+        <p>Drop a pin, see the fare before you commit, and track your driver's live location until they pull up.</p>
+        <span class="go">Open Rider app <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </a>
+      <a class="card portal-card" href="driver.html">
+        <div class="portal-icon">🚗</div>
+        <h3>Driver</h3>
+        <p>Go online, accept nearby requests, and get turn-by-turn directions to pickup and drop with one tap.</p>
+        <span class="go">Open Driver app <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </a>
+      <a class="card portal-card" href="admin.html">
+        <div class="portal-icon">📊</div>
+        <h3>Admin</h3>
+        <p>Watch every online driver on a live map, review ride history and revenue, and manage riders and drivers.</p>
+        <span class="go">Open Admin panel <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="fare">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-eyebrow">Pricing, in the open</div>
+      <h2>One fare rule, everywhere</h2>
+      <p>Every app reads this exact formula from the same file, so what a rider is quoted is what a driver sees and what admin reports. Drag the slider to try it.</p>
+    </div>
+    <div class="card calc-card">
+      <div>
+        <div class="calc-slider-row"><span style="font-size:13px;color:var(--text-dim);">Trip distance</span><span class="km-val" id="kmLabel">4.0 km</span></div>
+        <input type="range" id="kmSlider" min="0" max="15" step="0.1" value="4" />
+        <div class="calc-scale"><span>0 km</span><span>15 km</span></div>
+        <div class="calc-breakdown">
+          <div class="line"><span>First 2 km (flat)</span><b>₹20</b></div>
+          <div class="line"><span>Extra distance</span><b id="extraKmLine">2.0 km × ₹5</b></div>
+          <div class="line"><span>Rider sees this exact number before booking</span><b>&nbsp;</b></div>
+        </div>
+      </div>
+      <div class="calc-result">
+        <div class="label">Estimated fare</div>
+        <div class="amount"><span>₹</span><span id="fareAmount">30</span></div>
+        <div class="sub">Rounded to the nearest rupee · <code>shared/fare.js</code></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-eyebrow">Under the hood</div>
+      <h2>Built for a live fleet</h2>
+      <p>Everything a small ride-hailing operation actually needs, nothing it doesn't.</p>
+    </div>
+    <div class="features-grid">
+      <div class="card feature-card">
+        <span class="tag">● Live</span>
+        <h3>Encrypted GPS tracking</h3>
+        <p>Driver location streams in continuously and is AES-GCM encrypted client-side before it ever touches the database — so raw coordinates never sit in plain sight, even in the DB console.</p>
+      </div>
+      <div class="card feature-card">
+        <span class="tag">Alerts</span>
+        <h3>Two-layer notifications</h3>
+        <p>In-tab alerts fire instantly while the app is open; a background push server delivers real notifications even when the phone is locked or the tab is closed.</p>
+      </div>
+      <div class="card feature-card">
+        <span class="tag">Routing</span>
+        <h3>One-tap directions</h3>
+        <p>The moment a driver accepts, a Directions button opens Google Maps straight to the pickup pin — then automatically switches to the drop once the ride is under way.</p>
+      </div>
+      <div class="card feature-card">
+        <span class="tag">Fleet</span>
+        <h3>Full admin oversight</h3>
+        <p>A live map of every online driver, ride history with status and revenue, and the ability to ban riders or drivers who misbehave — all in one PIN-gated panel.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="flow">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-eyebrow">What happens after you tap "book"</div>
+      <h2>The ride lifecycle</h2>
+    </div>
+    <div class="card" style="padding:26px 24px;">
+      <div class="flow-track">
+        <div class="flow-step done"><div class="node">1</div><span class="label">Requested</span></div>
+        <div class="flow-connector"></div>
+        <div class="flow-step done"><div class="node">2</div><span class="label">Accepted</span></div>
+        <div class="flow-connector"></div>
+        <div class="flow-step done"><div class="node">3</div><span class="label">Arrived</span></div>
+        <div class="flow-connector"></div>
+        <div class="flow-step"><div class="node">4</div><span class="label">Ongoing</span></div>
+        <div class="flow-connector"></div>
+        <div class="flow-step"><div class="node">5</div><span class="label">Completed</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="brand">Chalo<span>.</span></div>
+      <div class="footer-links">
+        <a href="rider.html">Rider app</a>
+        <a href="driver.html">Driver app</a>
+        <a href="admin.html">Admin panel</a>
+        <a href="README.md">Setup guide</a>
+      </div>
+    </div>
+    <div class="footer-note">Self-hosted on your own Firebase project. No ads, no data resale, no middleman cut.</div>
+  </div>
+</footer>
+
+<script type="module">
+  import { calculateFare } from "./shared/fare.js";
+
+  const slider = document.getElementById('kmSlider');
+  const kmLabel = document.getElementById('kmLabel');
+  const fareAmount = document.getElementById('fareAmount');
+  const extraKmLine = document.getElementById('extraKmLine');
+
+  function render() {
+    const km = parseFloat(slider.value);
+    const fare = calculateFare(km);
+    const extraKm = Math.max(0, km - 2);
+    kmLabel.textContent = `${km.toFixed(1)} km`;
+    fareAmount.textContent = fare;
+    extraKmLine.textContent = `${extraKm.toFixed(1)} km × ₹5`;
+    const pct = (km / 15) * 100;
+    slider.style.setProperty('--fill', `${pct}%`);
+  }
+
+  slider.addEventListener('input', render);
+  render();
+</script>
+</body>
+</html>
